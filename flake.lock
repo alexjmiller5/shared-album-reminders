@@ -1,0 +1,48 @@
+{
+  "nodes": {
+    "life-data": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1789226964,
+        "narHash": "sha256-WgKAU0jheRzR+mBOpXxL6/G5Nobf2bz147PxCZ0fRlo=",
+        "owner": "alexjmiller5",
+        "repo": "life-data",
+        "rev": "33f0688df6681610efebb5e6de09a4d018c6b535",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alexjmiller5",
+        "repo": "life-data",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1789073787,
+        "narHash": "sha256-xfX/toC2QV707s06GbP4II/TxYF0fNQj7s5/LClNDKc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "aff8a0b28396750446e5537a96461bc4facdb287",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "life-data": "life-data",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
