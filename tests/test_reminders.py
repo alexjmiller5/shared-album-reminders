@@ -2,7 +2,7 @@ import importlib.util
 import sqlite3
 import subprocess
 import sys
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -133,3 +133,137 @@ def test_same_title_on_different_identified_album_does_not_suppress_new_task():
         {"album_id": "album-old", "title": 'Copy shared album "Example Album" to the photo library'}
     ]
     assert len(reminders.plan_reminders([album], existing, today=date(2026, 9, 12))) == 1
+
+
+ALBUM_UUID = "11111111-1111-4111-8111-111111111111"
+
+
+def prepare(albums, existing=(), legacy=(), **kwargs):
+    return reminders.prepare_task_inserts(
+        albums,
+        list(existing),
+        title_column="caption",
+        due_column="deadline",
+        defaults={"stage": "Pending", "labels": ["Review"], "groups": ["project-1"]},
+        legacy_tasks=list(legacy),
+        today=kwargs.get("today", date(2026, 1, 2)),
+        now=datetime(2026, 1, 2, 12, 0, 0, 123456, tzinfo=UTC),
+    )
+
+
+def test_adapter_maps_runtime_fields_without_rewriting_date_precision():
+    (row,) = prepare([reminders.Album(ALBUM_UUID, "Example", date(2026, 1, 2))])
+    assert row["caption"] == 'Copy shared album "Example" to the photo library'
+    assert row["deadline"] == "2026-01-30"
+    assert row["stage"] == "Pending"
+    assert row["labels"] == ["Review"]
+    assert row["groups"] == ["project-1"]
+    assert row["updated_at"] == "2026-01-02T12:00:00.123Z"
+    assert row["id"] == "ba74962a0e0952f883819964df964f7a"
+    assert set(row) == {"id", "caption", "deadline", "stage", "labels", "groups", "updated_at"}
+
+
+@pytest.mark.parametrize(
+    "state,deleted",
+    [("Pending", None), ("Finished", None), ("Canceled", None), ("Finished", "2026-01-03")],
+)
+def test_adapter_never_changes_existing_occurrence_even_after_rename(state, deleted):
+    import copy
+
+    (old,) = prepare([reminders.Album(ALBUM_UUID, "Before", None)])
+    old.update(stage=state, deleted_at=deleted, deadline="2025-12-01")
+    original = copy.deepcopy(old)
+    assert prepare([reminders.Album(ALBUM_UUID, "After", None)], [old]) == []
+    assert old == original
+
+
+def test_uuid_spelling_and_retry_day_do_not_change_singleton_identity():
+    (a,) = prepare([reminders.Album(ALBUM_UUID, "Before", None)])
+    (b,) = prepare(
+        [reminders.Album(ALBUM_UUID.replace("-", "").upper(), "After", None)],
+        today=date(2026, 1, 4),
+    )
+    assert a["id"] == b["id"]
+    assert len(a["id"]) == 32
+    assert a["deadline"] == "2026-01-30"
+    assert b["deadline"] == "2026-02-01"
+
+
+def test_adapter_does_not_use_unidentified_task_titles_as_album_identity():
+    album = reminders.Album(ALBUM_UUID, "Example", None)
+    row = {"id": "unrelated-task", "caption": 'Copy shared album "Example" to the photo library'}
+    assert len(prepare([album], [row])) == 1
+    assert prepare([album], legacy=[row]) == []
+
+
+def test_legacy_title_match_must_be_unambiguous():
+    albums = [
+        reminders.Album(ALBUM_UUID, "Example", None),
+        reminders.Album("22222222-2222-4222-8222-222222222222", "Example", None),
+    ]
+    assert len({r["id"] for r in prepare(albums)}) == 2
+    legacy = {"id": "legacy-task", "caption": 'Copy shared album "Example" to the photo library'}
+    with pytest.raises(ValueError, match="ambiguous"):
+        prepare(albums, legacy=[legacy])
+
+
+@pytest.mark.parametrize(
+    "record",
+    [{"caption": "Example"}, {"id": ""}, {"id": "record-1"}, {"id": "record-1", "caption": None}],
+)
+def test_adapter_rejects_incomplete_read_records(record):
+    with pytest.raises(ValueError):
+        prepare([reminders.Album(ALBUM_UUID, "Example", None)], [record])
+
+
+def test_duplicate_album_inventory_cannot_emit_two_inserts():
+    album = reminders.Album(ALBUM_UUID, "Example", None)
+    with pytest.raises(ValueError, match="duplicate"):
+        prepare([album, album])
+
+
+@pytest.mark.parametrize(
+    "defaults",
+    [{"id": "other"}, {"caption": "override"}, {"deadline": "2030-01-01"}, {"updated_at": "bad"}],
+)
+def test_defaults_cannot_override_owned_fields(defaults):
+    with pytest.raises(ValueError):
+        reminders.prepare_task_inserts(
+            [],
+            [],
+            title_column="caption",
+            due_column="deadline",
+            defaults=defaults,
+            today=date(2026, 1, 2),
+            now=datetime(2026, 1, 2, tzinfo=UTC),
+        )
+
+
+@pytest.mark.parametrize(
+    "title,due",
+    [("", "deadline"), ("caption", "caption"), ("id", "deadline"), ("caption", "deleted_at")],
+)
+def test_mapping_cannot_replace_protocol_fields(title, due):
+    with pytest.raises(ValueError):
+        reminders.prepare_task_inserts(
+            [],
+            [],
+            title_column=title,
+            due_column=due,
+            defaults={},
+            today=date(2026, 1, 2),
+            now=datetime(2026, 1, 2, tzinfo=UTC),
+        )
+
+
+def test_naive_write_timestamp_is_rejected():
+    with pytest.raises(ValueError, match="timezone"):
+        reminders.prepare_task_inserts(
+            [],
+            [],
+            title_column="caption",
+            due_column="deadline",
+            defaults={},
+            today=date(2026, 1, 2),
+            now=datetime(2026, 1, 2),
+        )

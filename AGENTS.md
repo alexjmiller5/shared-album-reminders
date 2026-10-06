@@ -12,8 +12,13 @@ their photo library. Photo copying is manual.
   Existing normalized task records must include every status,
   including completed tasks. Match album ID first, then the expected title;
   ambiguous title-only matches fail. Existing due dates are never updated.
-- The task writer is unavailable because the destination task catalog
-  contract has not been supplied. Default execution fails clearly;
+- `prepare_task_inserts` maps reminders into candidate rows using runtime
+  column names and defaults, never private schema or project constants.
+  Task IDs are UUIDv5 of the fixed application namespace and canonical album
+  UUID; matching task IDs suppress every status and tombstones. Only explicitly
+  reviewed legacy rows participate in title matching. The adapter performs no IO.
+- The task writer is unavailable until the supported create-only Life CLI
+  and enrollment contract is connected. Default execution fails clearly;
   `--dry-run` displays candidates with `dedupe_checked: false`.
 - The Nix package owns its Python and Life CLI dependencies. The exported
   Home Manager module owns the daily launchd job and defaults to disabled.
