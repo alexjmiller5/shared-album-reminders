@@ -6,8 +6,10 @@ their photo library. Photo copying is manual.
 - `scripts/shared_album_reminders.py` reads only live `CollectionShare`
   metadata from the Photos SQLite database, through a read-only connection
   including the active WAL. It supports the macOS 26 schema.
-- `plan_reminders` uses album creation date plus 28 days, or discovery date
-  plus 28 days. Existing normalized task records must include every status,
+- `plan_reminders` uses album creation date plus 28 days, or the first
+  successful task-creation date plus 28 days. A failed write leaves no receipt;
+  a retry on a later day uses that later date until a task exists.
+  Existing normalized task records must include every status,
   including completed tasks. Match album ID first, then the expected title;
   ambiguous title-only matches fail. Existing due dates are never updated.
 - The task writer is unavailable because the destination task catalog

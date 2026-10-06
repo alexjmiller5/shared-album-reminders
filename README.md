@@ -2,7 +2,8 @@
 
 Plans reminders to copy each new shared photo album into the photo library,
 due 28 days after album creation. If creation date is absent, use
-the date first found. Copying photos remains manual.
+the date the reminder task is first successfully created. Copying photos
+remains manual.
 
 **Current status:** the album reader and reminder planner work. Task writing
 is not connected, so no reminder tasks are created. The default command exits
@@ -73,7 +74,9 @@ Connect one reader and writer to the actual migrated Life task catalog:
 
 The task itself retains discovery-based due dates and is the deduplication
 record. There is no separate album state file. Missing creation dates use the
-first successful discovery/write run; a failed run leaves no hidden receipt.
+first successful task creation; a failed run leaves no hidden receipt.
+Retries on later days use that later date until a task exists. Once created,
+the task retains its due date across subsequent scans and completion.
 
 ## Development
 
