@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     life-data = {
-      url = "github:alexjmiller5/life-data";
+      url = "github:alexjmiller5/life-data/22daeac57fd9a821d70fba468daa8a081b7d98c3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -20,8 +20,9 @@
         in {
           default = pkgs.writeShellApplication {
             name = "shared-album-reminders";
-            runtimeInputs = [ pkgs.python3 life-data.packages.${system}.default ];
+            runtimeInputs = [ pkgs.python313 ];
             text = ''
+              export PYTHONPATH="${life-data.packages.${system}.default}/${pkgs.python313.sitePackages}"
               exec python3 ${./scripts/shared_album_reminders.py} "$@"
             '';
           };
@@ -36,10 +37,11 @@
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
           tests = pkgs.runCommand "shared-album-reminders-tests" {
-            nativeBuildInputs = [ (pkgs.python3.withPackages (p: [ p.pytest ])) ];
+            nativeBuildInputs = [ (pkgs.python313.withPackages (p: [ p.pytest ])) ];
           } ''
             export PYTHONDONTWRITEBYTECODE=1
-            pytest -p no:cacheprovider ${self}/tests/test_reminders.py -q
+            export PYTHONPATH="${life-data.packages.${system}.default}/${pkgs.python313.sitePackages}"
+            pytest -p no:cacheprovider ${self}/tests -q
             touch "$out"
           '';
         });

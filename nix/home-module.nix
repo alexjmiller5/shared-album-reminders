@@ -12,6 +12,16 @@ in {
       default = "${config.home.homeDirectory}/Pictures/Photos Library.photoslibrary";
       description = "Photos library to inspect.";
     };
+    dryRun = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Validate installed access and preview without creating tasks.";
+    };
+    configFile = lib.mkOption {
+      type = lib.types.str;
+      default = "${config.xdg.configHome}/shared-album-reminders/config.json";
+      description = "Runtime service configuration created with --configure.";
+    };
     hour = lib.mkOption {
       type = lib.types.ints.between 0 23;
       default = 9;
@@ -29,7 +39,8 @@ in {
       enable = true;
       config = {
         Label = "org.shared-album-reminders.daily";
-        ProgramArguments = [ (lib.getExe package) "--library" cfg.library ];
+        ProgramArguments = [ (lib.getExe package) "--library" cfg.library "--config" cfg.configFile ]
+          ++ lib.optional cfg.dryRun "--dry-run";
         StartCalendarInterval = [{ Hour = cfg.hour; Minute = 0; }];
         StandardOutPath = logPath;
         StandardErrorPath = logPath;

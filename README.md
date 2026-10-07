@@ -1,115 +1,114 @@
 # Shared Album Reminders
 
-Plans reminders to copy each new shared photo album into the photo library,
-due 28 days after album creation. If creation date is absent, use
-the date the reminder task is first successfully created. Copying photos
-remains manual.
+A daily macOS job creates one Life Data reminder when it discovers a shared
+Photos album. The reminder asks you to copy the photos you want manually.
+Its deadline is the album's creation date plus 28 days. If that date is absent,
+the deadline is the first successful task-creation date plus 28 days.
+Existing reminders are never edited, reset or recreated after completion.
 
-**Current status:** the album reader, reminder planner and task-row adapter work.
-Task writing is not connected, so no reminder tasks are created. The default
-command exits with a clear error; the scheduled module must remain disabled
-until the supported create-only Life CLI/enrollment contract is connected and
-live-write acceptance passes.
+## Setup
 
-## Preview
+Install the flake package, then pass your service's creation descriptor to
+`shared-album-reminders --configure` on stdin. The descriptor contains an HTTPS
+`endpoint`, exact `policy` ID/revision, `table`, `title_column`, `due_column`,
+and `defaults` object. No credentials or personal schemas are compiled in.
+The service must configure a create-only singleton policy matching the stable
+application identity described below, with atomic origin creation.
+
+Enroll a separately minted, narrowly scoped token through
+`shared-album-reminders --enroll-token` on stdin. It is stored in native Keychain
+through Life Data's credential library, under an application-specific account
+bound to the endpoint. It is never written to a config file or command argument.
+The app also accepts `SHARED_ALBUM_REMINDERS_TOKEN`, or a generic
+`credential_command` argument array whose stdout supplies the token. The scheduled
+context must explicitly have its own supported credential access. Operator,
+replica and other applications' credentials are rejected.
+
+Choose the initial backlog explicitly:
 
 ```sh
-nix run . -- --dry-run
-nix run . -- --dry-run --library /path/to/Library.photoslibrary
+# Ignore the albums already present; remind only for later discoveries:
+shared-album-reminders --baseline-existing
+# Alternatively, include existing albums (some may immediately be overdue):
+shared-album-reminders --initialize
 ```
 
-The preview shows album candidates and due dates. It explicitly reports that
-task deduplication has not been checked. It never writes to Photos or Life.
-Reads include SQLite's active WAL, so recently synced album rows are visible.
-The reader supports macOS 26's `CollectionShare` schema and fails on an
-unsupported schema rather than reporting an empty inventory. Creation dates
-are interpreted as UTC calendar dates. Discovery dates use the local date.
+Initialization is exclusive and never overwrites a baseline. State lives in
+`$XDG_STATE_HOME/shared-album-reminders/state.json` (default `~/.local/state`).
+It contains only baseline UUIDs and any retained `adopted` UUID-to-task-ID mappings,
+not task-creation receipts or discovery deadlines. Preserve it when replacing a
+machine; reenroll its credential through the supported interface. Without state,
+the configured job fails closed. Adopted IDs always win, including tombstones;
+a missing adopted task stops writes and never produces an alternate ID.
 
-The focused query reads album metadata directly, following the layout used
-by [osxphotos](https://github.com/RhetTbull/osxphotos/blob/main/osxphotos/photosdb/photosdb.py).
-It does not load photo records or require osxphotos's media/export dependencies.
+Runtime configuration lives in
+`$XDG_CONFIG_HOME/shared-album-reminders/config.json` (default `~/.config`).
+`--config`, `--state` and `--library` override the respective paths.
+The default library is `~/Pictures/Photos Library.photoslibrary`.
 
-## Nix module
+## Preview and scheduling
+
+```sh
+shared-album-reminders --dry-run
+```
+
+With configuration, preview verifies the exact creation capability, reads all
+pages of the permitted task projection including tombstones, and displays only
+eligible candidates. Without configuration it previews Photos alone and labels
+deduplication unchecked. No preview writes tasks.
 
 The flake exports `packages.<system>.default` and `homeModules.default`.
-Import the Home Manager module into a macOS configuration. The package brings
-its own Python and Life CLI; no separate dependency setup is needed.
+Its Home Manager module installs a daily LaunchAgent at 09:00 local time:
 
 ```nix
-# Flake input:
-shared-album-reminders = {
-  url = "github:alexjmiller5/shared-album-reminders";
-  inputs.nixpkgs.follows = "nixpkgs";
-};
-
-# Home Manager imports:
 imports = [ inputs.shared-album-reminders.homeModules.default ];
-
-# Keep disabled until task integration is available:
-services.shared-album-reminders.enable = false;
+services.shared-album-reminders = {
+  enable = true;
+  dryRun = true; # Verify installed Photos and credential access first.
+};
 ```
 
-Once task integration is connected, `enable = true` installs a daily user
-LaunchAgent at 09:00 local time. Optional `hour` and `library` settings change
-the schedule or library. Logs go to `~/Library/Logs/shared-album-reminders.log`.
-A native macOS privacy grant may be necessary to read the library. Access
-must be checked from the installed LaunchAgent; a successful terminal or SSH
-read does not prove access in that context. Reenroll Photos and Life through
-their supported interfaces on a replacement machine.
+After a successful installed dry run, set `dryRun = false`. Optional `hour`,
+`library` and `configFile` change the schedule and paths. The job is
+`org.shared-album-reminders.daily`; logs are in
+`~/Library/Logs/shared-album-reminders.log`. Nix owns installation and the job;
+runtime code never points at a working tree. Native Photos privacy grants and
+Keychain access must work from launchd, not just an interactive terminal.
 
-## Remaining task integration
+## Service contract
 
-Connect one reader and writer to the actual migrated Life task catalog:
+The app uses supported Life Data HTTP interfaces because the installed CLI has
+no narrow create-only operation. It uses the shared Python `life_data.creation`
+receipt/session validators, pinned in uv and Nix, with standard-library transport.
+It never uses direct service storage or a Notion fallback.
 
-1. Read its table, column, required-field, status and reference contracts.
-2. Query existing tasks through the supported narrow CLI, including completed
-   tasks and tombstone existence. Require complete bounded reads; no broad
-   replica credential substitute. Supply only reviewed legacy title matches.
-3. Pass runtime field mappings and creation defaults to `prepare_task_inserts`.
-   It produces candidate rows without IO. Submit through the narrow CLI's
-   create-only operation backed by Life's existing insert-if-absent primitive.
-   Never use an upsert, infer the schema, or create a new task table.
-4. Re-read writes to verify them. Query again after any uncertain result before
-   retrying. An existing task retains its due date, including discovery fallback.
-5. Review initial candidates before enabling the schedule; existing old albums
-   without matching tasks can yield overdue reminders. Test the installed
-   launch context and native Life sync, then enable the daily job.
+Required grants are exactly `rows:create:<policy-id>:<revision>` plus projected
+reads of `id`, `deleted_at`, the configured title column and due column on the
+configured table. No People or arbitrary provenance access is needed.
+The service owns lineage and creates it atomically only on CREATED. EXISTING
+preserves the entire row, history and provenance without attributing creation.
+Malformed or uncertain receipts stop the run; a later run checks the same IDs.
 
-The task itself retains discovery-based due dates and is the deduplication
-record. There is no separate album state file. Missing creation dates use the
-first successful task creation; a failed run leaves no hidden receipt.
-Retries on later days use that later date until a task exists. Once created,
-the task retains its due date across subsequent scans and completion.
-
-### Task-row adapter
-
-`prepare_task_inserts` accepts albums, existing task records, the configured
-title/due column names and creation defaults, reviewed legacy records, the
-run's local calendar date, and a timezone-aware insertion timestamp. Field
-names, status/tag choices and project references belong in runtime configuration.
-Date-only deadlines remain `YYYY-MM-DD`, including with a mixed date/datetime
-destination. The adapter does not copy task bodies, people, or completed dates.
-
-The stable task key is lowercase 32-hex UUIDv5 using `NAMESPACE_URL` and
+Task IDs are lowercase 32-hex UUIDv5 with `NAMESPACE_URL` and raw UTF-8 name
 `shared-album-reminders:album:<canonical-lowercase-hyphenated-Photos-UUID>`.
-It contains no title, scan date or credential identity. Existing IDs suppress
-candidates regardless of status or deletion. The adapter never mutates those
-records. An unrelated task's matching title is not sufficient evidence of
-album identity; title fallback requires explicitly reviewed legacy records.
+The service policy uses `occurrenceType: "none"` and
+`identity: {encoding: "prefix-source-v1", prefix: "shared-album-reminders:album:"}`.
+The request omits `occurrenceKey`; no null, sentinel, year or scan date is hashed.
+The external source registry and task defaults are service/user state.
 
-A snapshot is not an atomic duplicate check. Concurrent runs and lost write
-acknowledgements must be resolved by the service's insert-if-absent operation
-and readback. This adapter does not implement a second writer or grant access.
-Its tests are synthetic; they do not establish historical import coverage,
-credential readiness or launch-context acceptance.
+Reads use the macOS 26 Photos `CollectionShare` schema through a read-only SQLite
+connection including active WAL. Photos are never copied or modified. Source
+creation timestamps are interpreted as UTC dates; fallback uses the local day.
+Unsupported schemas fail clearly. Date-only deadlines stay `YYYY-MM-DD`.
 
 ## Development
 
 ```sh
 just test
 just check
-nix build
+nix build .#checks.aarch64-darwin.tests .#packages.aarch64-darwin.default
 ```
 
-Tests cover album filtering, WAL visibility, date fallback, completed-task
-matching, renamed albums, ambiguous titles, and refusing unavailable writes.
+Tests use synthetic Photos metadata and task records. Integration tests cover
+baseline preservation, singleton IDs, narrow grants, pagination, tombstones,
+adopted missing targets, receipt validation and retry deadlines.
