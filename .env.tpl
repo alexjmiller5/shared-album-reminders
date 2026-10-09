@@ -1,1 +1,1 @@
-# No credentials are required. Task access will use the installed local Life CLI.
+# No credentials are required. Task access will use the installed local Soma CLI.

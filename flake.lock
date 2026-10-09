@@ -1,26 +1,5 @@
 {
   "nodes": {
-    "life-data": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1791331177,
-        "narHash": "sha256-XUVxu590wnzhnAmXnCSf+TL/X8EBo7dQIXJGV60esL8=",
-        "owner": "alexjmiller5",
-        "repo": "life-data",
-        "rev": "22daeac57fd9a821d70fba468daa8a081b7d98c3",
-        "type": "github"
-      },
-      "original": {
-        "owner": "alexjmiller5",
-        "repo": "life-data",
-        "rev": "22daeac57fd9a821d70fba468daa8a081b7d98c3",
-        "type": "github"
-      }
-    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1789073787,
@@ -39,8 +18,29 @@
     },
     "root": {
       "inputs": {
-        "life-data": "life-data",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "soma": "soma"
+      }
+    },
+    "soma": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791547045,
+        "narHash": "sha256-Ey1jG8eiTX+UWNHOyHw2zE6RrxxjgUwwcklKQRElekI=",
+        "owner": "alexjmiller5",
+        "repo": "soma",
+        "rev": "1950bdb22ad8965bcee776ef4051f1665b590aeb",
+        "type": "github"
+      },
+      "original": {
+        "owner": "alexjmiller5",
+        "repo": "soma",
+        "rev": "1950bdb22ad8965bcee776ef4051f1665b590aeb",
+        "type": "github"
       }
     }
   },

@@ -3,13 +3,13 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    life-data = {
-      url = "github:alexjmiller5/life-data/22daeac57fd9a821d70fba468daa8a081b7d98c3";
+    soma = {
+      url = "github:alexjmiller5/soma/1950bdb22ad8965bcee776ef4051f1665b590aeb";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, life-data }:
+  outputs = { self, nixpkgs, soma }:
     let
       eachSystem = nixpkgs.lib.genAttrs [
         "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux"
@@ -22,7 +22,7 @@
             name = "shared-album-reminders";
             runtimeInputs = [ pkgs.python313 ];
             text = ''
-              export PYTHONPATH="${life-data.packages.${system}.default}/${pkgs.python313.sitePackages}"
+              export PYTHONPATH="${soma.packages.${system}.default}/${pkgs.python313.sitePackages}"
               exec python3 ${./scripts/shared_album_reminders.py} "$@"
             '';
           };
@@ -40,7 +40,7 @@
             nativeBuildInputs = [ (pkgs.python313.withPackages (p: [ p.pytest ])) ];
           } ''
             export PYTHONDONTWRITEBYTECODE=1
-            export PYTHONPATH="${life-data.packages.${system}.default}/${pkgs.python313.sitePackages}"
+            export PYTHONPATH="${soma.packages.${system}.default}/${pkgs.python313.sitePackages}"
             pytest -p no:cacheprovider ${self}/tests -q
             touch "$out"
           '';

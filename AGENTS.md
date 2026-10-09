@@ -1,6 +1,6 @@
 # Shared Album Reminders
 
-A macOS daily job discovers shared albums and creates one Life Data reminder.
+A macOS daily job discovers shared albums and creates one Soma reminder.
 Photo copying remains manual.
 
 - `scripts/shared_album_reminders.py` owns collection, planning, initialization,
@@ -13,7 +13,7 @@ Photo copying remains manual.
   never overwrites state; adopted missing targets fail closed without fallback.
 - Runtime service configuration supplies mappings, policy and defaults. No
   personal content or private schema constants belong in source.
-- Life Data is an approved shared service. Use its supported narrow APIs and
+- Soma is an approved shared service. Use its supported narrow APIs and
   shared receipt/session validators, never its storage, other apps' credentials,
   broad grants or Notion. The installed CLI lacks create-only support.
 - Credentials are native Keychain state bound to this caller and endpoint, or an

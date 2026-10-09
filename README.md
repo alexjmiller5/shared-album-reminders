@@ -1,6 +1,6 @@
 # Shared Album Reminders
 
-A daily macOS job creates one Life Data reminder when it discovers a shared
+A daily macOS job creates one Soma reminder when it discovers a shared
 Photos album. The reminder asks you to copy the photos you want manually.
 Its deadline is the album's creation date plus 28 days. If that date is absent,
 the deadline is the first successful task-creation date plus 28 days.
@@ -17,7 +17,7 @@ application identity described below, with atomic origin creation.
 
 Enroll a separately minted, narrowly scoped token through
 `shared-album-reminders --enroll-token` on stdin. It is stored in native Keychain
-through Life Data's credential library, under an application-specific account
+through Soma's credential library, under an application-specific account
 bound to the endpoint. It is never written to a config file or command argument.
 The app also accepts `SHARED_ALBUM_REMINDERS_TOKEN`, or a generic
 `credential_command` argument array whose stdout supplies the token. The scheduled
@@ -77,8 +77,8 @@ Keychain access must work from launchd, not just an interactive terminal.
 
 ## Service contract
 
-The app uses supported Life Data HTTP interfaces because the installed CLI has
-no narrow create-only operation. It uses the shared Python `life_data.creation`
+The app uses supported Soma HTTP interfaces because the installed CLI has
+no narrow create-only operation. It uses the shared Python `soma.creation`
 receipt/session validators, pinned in uv and Nix, with standard-library transport.
 It never uses direct service storage or a Notion fallback.
 

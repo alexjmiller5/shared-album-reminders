@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["life-data @ git+https://github.com/alexjmiller5/life-data@22daeac57fd9a821d70fba468daa8a081b7d98c3"]
+# dependencies = ["soma @ git+https://github.com/alexjmiller5/soma@1950bdb22ad8965bcee776ef4051f1665b590aeb"]
 # ///
 """Create one reminder per newly discovered shared album."""
 
@@ -239,12 +239,12 @@ def read_tasks(client, config: dict) -> list[dict]:
 
 
 def run_reminders(albums, config, state, client, *, today, now, dry_run):
-    from life_data.creation import validate_creation_receipt, validate_creation_session
+    from soma.creation import validate_creation_receipt, validate_creation_session
 
     if not validate_creation_session(
         client.request("/v1/session"), config["policy"], expected_scopes(config)
     ):
-        raise ValueError("Life credential does not have exactly the configured narrow grants.")
+        raise ValueError("Soma credential does not have exactly the configured narrow grants.")
     if set(state) != {"version", "baseline", "adopted"} or state["version"] != 1:
         raise ValueError("Invalid baseline state; initialization is required.")
     if not isinstance(state["baseline"], list) or not isinstance(state["adopted"], dict):
@@ -310,12 +310,12 @@ def run_reminders(albums, config, state, client, *, today, now, dry_run):
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise ValueError("Life redirect refused; credentials were not forwarded.")
+        raise ValueError("Soma redirect refused; credentials were not forwarded.")
 
 
-class LifeClient:
+class SomaClient:
     def __init__(self, config):
-        from life_data.credentials import read_token
+        from soma.credentials import read_token
 
         endpoint = config["endpoint"].rstrip("/")
         url = urllib.parse.urlsplit(endpoint)
@@ -327,7 +327,7 @@ class LifeClient:
             or url.query
             or url.fragment
         ):
-            raise ValueError("Life endpoint must be an HTTPS URL without credentials or query.")
+            raise ValueError("Soma endpoint must be an HTTPS URL without credentials or query.")
         token = os.environ.get("SHARED_ALBUM_REMINDERS_TOKEN")
         if not token and config.get("credential_command"):
             command = config["credential_command"]
@@ -362,12 +362,12 @@ class LifeClient:
             with self.opener.open(request, timeout=30) as response:
                 raw = response.read(2_000_001)
                 if len(raw) > 2_000_000:
-                    raise ValueError("Life response exceeded its size bound.")
+                    raise ValueError("Soma response exceeded its size bound.")
                 return {"status": response.status, "data": json.loads(raw)}
         except urllib.error.HTTPError as error:
             return {"status": error.code, "data": None}
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-            raise ValueError("Life request failed; task state may be unconfirmed.") from None
+            raise ValueError("Soma request failed; task state may be unconfirmed.") from None
 
 
 def credential_account(endpoint):
@@ -419,7 +419,7 @@ def main() -> int:
             print("Service configured. Enroll its dedicated credential separately.")
             return 0
         if args.enroll_token:
-            from life_data.credentials import store_token
+            from soma.credentials import store_token
 
             config = json.loads(args.config.read_text())
             store_token(credential_account(config["endpoint"]), sys.stdin.read().strip())
@@ -438,7 +438,7 @@ def main() -> int:
                 read_albums(args.library),
                 config,
                 state,
-                LifeClient(config),
+                SomaClient(config),
                 today=date.today(),
                 now=datetime.now(UTC),
                 dry_run=args.dry_run,
@@ -457,7 +457,7 @@ def main() -> int:
         return 1
     if not args.dry_run:
         print(
-            "Task writing is unavailable until the create-only Life task contract is connected. "
+            "Task writing is unavailable until the create-only Soma task contract is connected. "
             "Use --dry-run to inspect album candidates.",
             file=sys.stderr,
         )

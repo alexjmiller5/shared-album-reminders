@@ -189,7 +189,7 @@ def test_transport_refuses_redirect_and_invalid_endpoint(monkeypatch):
         "https://example.test?token=x",
     ]:
         with pytest.raises(ValueError, match="endpoint"):
-            r.LifeClient({"endpoint": url})
+            r.SomaClient({"endpoint": url})
     with pytest.raises(ValueError, match="redirect"):
         r.NoRedirect().redirect_request(None, None, 302, "", {}, "https://elsewhere.test")
 
@@ -238,7 +238,7 @@ def test_configuration_is_exclusive_and_never_persists_a_token(tmp_path):
 
 def test_transport_sends_product_user_agent_and_bounds_response(monkeypatch):
     monkeypatch.setenv("SHARED_ALBUM_REMINDERS_TOKEN", "synthetic")
-    client = r.LifeClient({"endpoint": "https://example.test"})
+    client = r.SomaClient({"endpoint": "https://example.test"})
 
     class Response:
         status = 200

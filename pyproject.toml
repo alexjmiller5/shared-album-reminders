@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Daily reminders to copy shared photo albums into the photo library"
 requires-python = ">=3.12"
 dependencies = [
-    "life-data",
+    "soma",
 ]
 
 [dependency-groups]
@@ -17,4 +17,4 @@ line-length = 100
 select = ["E", "F", "I", "UP"]
 
 [tool.uv.sources]
-life-data = { git = "https://github.com/alexjmiller5/life-data", rev = "22daeac57fd9a821d70fba468daa8a081b7d98c3" }
+soma = { git = "https://github.com/alexjmiller5/soma", rev = "1950bdb22ad8965bcee776ef4051f1665b590aeb" }

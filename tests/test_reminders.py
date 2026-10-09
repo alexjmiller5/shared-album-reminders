@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sqlite3
 import subprocess
 import sys
@@ -84,8 +85,15 @@ def test_missing_library_does_not_create_a_database(tmp_path):
     assert not library.exists()
 
 
-def test_cli_refuses_to_claim_task_writing_before_contract_exists():
-    result = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)
+def isolated(tmp_path):
+    """The script reads the user's config and Keychain; tests run without either."""
+    return {**os.environ, "XDG_CONFIG_HOME": str(tmp_path / "config")}
+
+
+def test_cli_refuses_to_claim_task_writing_before_contract_exists(tmp_path):
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT)], capture_output=True, text=True, env=isolated(tmp_path)
+    )
     assert result.returncode == 2
     assert "task contract" in result.stderr.lower()
 
@@ -119,6 +127,7 @@ def test_dry_run_exposes_unchecked_dedupe_without_writing(tmp_path):
         [sys.executable, str(SCRIPT), "--dry-run", "--library", str(make_library(tmp_path))],
         capture_output=True,
         text=True,
+        env=isolated(tmp_path),
     )
     assert result.returncode == 0
     output = json.loads(result.stdout)
