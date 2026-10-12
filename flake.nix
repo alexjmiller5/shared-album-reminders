@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     soma = {
-      url = "github:alexjmiller5/soma/1950bdb22ad8965bcee776ef4051f1665b590aeb";
+      url = "github:alexjmiller5/soma/a2bcf448391cdaa54d668d92a42f6a9272a6cf25";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

@@ -84,7 +84,13 @@ It never uses direct service storage or a Notion fallback.
 
 Required grants are exactly `rows:create:<policy-id>:<revision>` plus projected
 reads of `id`, `deleted_at`, the configured title column and due column on the
-configured table. No People or arbitrary provenance access is needed.
+configured table, optionally with `hub_at` on that table. No People or arbitrary
+provenance access is needed. With `hub_at` the app keeps a copy of the task
+projection (tombstones included) and reads only arrivals since its cursor
+(Soma's table-pull helper): a quiet day is one cursor request. The copy lives at
+`$XDG_CACHE_HOME/shared-album-reminders/task-pull.json` (default `~/.cache`,
+`--cache` overrides); deleting it costs one full read. Without `hub_at` every
+run reads every page of the projection.
 The service owns lineage and creates it atomically only on CREATED. EXISTING
 preserves the entire row, history and provenance without attributing creation.
 Malformed or uncertain receipts stop the run; a later run checks the same IDs.

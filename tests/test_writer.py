@@ -10,6 +10,7 @@ B = "22222222-2222-4222-8222-222222222222"
 NOW = datetime(2030, 1, 1, tzinfo=UTC)
 POLICY = {"id": "fixture", "revision": "a" * 64}
 CONFIG = {
+    "endpoint": "https://hub.test",
     "policy": POLICY,
     "table": "items",
     "title_column": "label",
@@ -19,24 +20,51 @@ CONFIG = {
 STATE = {"version": 1, "baseline": [], "adopted": {}}
 
 
+CURSOR = "tables:read:items:hub_at"
+
+
 class Client:
-    def __init__(self, rows=None, valid=True):
+    def __init__(self, rows=None, valid=True, cursor=False):
         self.rows = rows or []
         self.valid = valid
+        # Whether the credential carries the hub_at grant the arrival cursor needs.
+        self.cursor = cursor
         self.calls = []
 
     def request(self, path, body=None):
         self.calls.append((path, body))
         if path == "/v1/session":
+            scopes = r.expected_scopes(CONFIG) + ([CURSOR] if self.cursor else [])
             return {
                 "status": 200,
                 "data": {
-                    "scopes": r.expected_scopes(CONFIG) if self.valid else ["full"],
+                    "scopes": scopes if self.valid else ["full"],
                     "capabilities": {
                         "rowCreation": {"protocol": "atomic-origin-v1", "policies": [POLICY]}
                     },
                 },
             }
+        if path == "/v1/cursor":
+            if not self.cursor:
+                return {"status": 403, "data": None}
+            mark = max((row["hub_at"] for row in self.rows), default="")
+            at_mark = sum(row["hub_at"] == mark for row in self.rows)
+            return {
+                "status": 200,
+                "data": {
+                    "tables": {"items": mark},
+                    "at_mark": {"items": at_mark} if mark else {},
+                    "pull_batch": {"items": 50, "rows": 5000},
+                },
+            }
+        if path == "/v1/rows/pull" and "batch" in body:
+            (item,) = body["batch"]
+            rows = sorted(
+                (row for row in self.rows if row["hub_at"] >= item["since"]),
+                key=lambda row: row["id"],
+            )
+            page = [{c: row.get(c) for c in item["columns"]} for row in rows]
+            return {"status": 200, "data": {"batch": [{"rows": page, "next_cursor": None}]}}
         if path == "/v1/rows/pull":
             return {"status": 200, "data": {"rows": self.rows, "next_cursor": None}}
         if path == "/v1/rows/create":
@@ -54,7 +82,7 @@ class Client:
         raise AssertionError(path)
 
 
-def run(client, *, albums=None, state=None, dry=False, today=date(2030, 1, 1)):
+def run(client, *, albums=None, state=None, dry=False, today=date(2030, 1, 1), cache=None):
     return r.run_reminders(
         albums or [r.Album(A, "Example", None)],
         CONFIG,
@@ -63,6 +91,7 @@ def run(client, *, albums=None, state=None, dry=False, today=date(2030, 1, 1)):
         today=today,
         now=NOW,
         dry_run=dry,
+        cache=cache,
     )
 
 
@@ -260,3 +289,87 @@ def test_transport_sends_product_user_agent_and_bounds_response(monkeypatch):
 
     client.opener = Opener()
     assert client.request("/v1/session") == {"status": 200, "data": {}}
+
+    # A full 5,000-row page can pass 2 MB; the bound follows the hub's 4 MiB batch.
+    page = b'{"rows": "' + b"a" * 3_000_000 + b'"}'
+    Response.read = lambda self, limit: page[:limit]
+    assert client.request("/v1/rows/pull")["status"] == 200
+    page = b'{"rows": "' + b"a" * 5_000_000 + b'"}'
+    with pytest.raises(ValueError, match="size bound"):
+        client.request("/v1/rows/pull")
+
+
+T1, T2 = "2030-01-01T00:00:00.000Z", "2030-01-02T00:00:00.000Z"
+
+
+def task(id, hub_at, deleted_at=None):
+    return {"id": id, "label": "other", "due": None, "deleted_at": deleted_at, "hub_at": hub_at}
+
+
+def paths(client):
+    return [path for path, _ in client.calls]
+
+
+def test_cursor_grant_reads_only_arrivals_and_keeps_tombstones(tmp_path):
+    cache = tmp_path / "task-pull.json"
+    client = Client([task("x", T1)], cursor=True)
+    assert run(client, cache=cache)["created"] == 1
+    assert paths(client) == ["/v1/session", "/v1/cursor", "/v1/rows/pull", "/v1/rows/create"]
+    assert client.calls[2][1]["batch"][0]["since"] == ""
+
+    # The created reminder was deleted since; its tombstone must still dedupe.
+    client = Client([task("x", T1), task(r.task_id_for_album(A), T2, T2)], cursor=True)
+    assert run(client, cache=cache)["candidates"] == []
+    assert paths(client) == ["/v1/session", "/v1/cursor", "/v1/rows/pull"]
+    assert client.calls[2][1]["batch"][0]["since"] == T1
+
+    # Nothing moved: one cursor request, and the held copy still dedupes.
+    client = Client([task(r.task_id_for_album(A), T2, T2)], cursor=True)
+    assert run(client, cache=cache)["candidates"] == []
+    assert paths(client) == ["/v1/session", "/v1/cursor"]
+    held = json.loads(cache.read_text())
+    assert sorted(row["id"] for row in held["rows"]) == sorted([r.task_id_for_album(A), "x"])
+
+
+def test_without_the_hub_at_grant_the_whole_table_is_read_and_nothing_cached(tmp_path):
+    cache = tmp_path / "task-pull.json"
+    client = Client([task(r.task_id_for_album(A), T1)])
+    assert run(client, cache=cache)["candidates"] == []
+    assert paths(client) == ["/v1/session", "/v1/rows/pull"]
+    assert "batch" not in client.calls[1][1]
+    assert not cache.exists()
+
+
+def test_an_unreadable_copy_is_dropped_for_a_full_pull(tmp_path):
+    cache = tmp_path / "task-pull.json"
+    cache.write_text("{not json")
+    client = Client([task(r.task_id_for_album(A), T1)], cursor=True)
+    assert run(client, cache=cache)["candidates"] == []
+    assert client.calls[2][1]["batch"][0]["since"] == ""
+
+
+def test_hub_at_grant_does_not_relax_scope_exactness():
+    client = Client(cursor=True)
+    original = client.request
+
+    def extra(path, body=None):
+        reply = original(path, body)
+        if path == "/v1/session":
+            reply["data"]["scopes"].append("tables:read:items:notes")
+        return reply
+
+    client.request = extra
+    with pytest.raises(ValueError, match="credential"):
+        run(client)
+    assert paths(client) == ["/v1/session"]
+
+
+def test_a_refused_cursor_read_never_writes():
+    client = Client([task("x", T1)], cursor=True)
+    original = client.request
+    client.request = lambda path, body=None: (
+        {"status": 500, "data": None} if path == "/v1/rows/pull" else original(path, body)
+    )
+    with pytest.raises(RuntimeError, match="HTTP 500"):
+        run(client)
+    assert "/v1/rows/create" not in paths(client)

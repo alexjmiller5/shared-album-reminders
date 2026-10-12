@@ -103,7 +103,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "soma", git = "https://github.com/alexjmiller5/soma?rev=1950bdb22ad8965bcee776ef4051f1665b590aeb" }]
+requires-dist = [{ name = "soma", git = "https://github.com/alexjmiller5/soma?rev=a2bcf448391cdaa54d668d92a42f6a9272a6cf25" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -114,4 +114,4 @@ dev = [
 [[package]]
 name = "soma"
 version = "0.1.0"
-source = { git = "https://github.com/alexjmiller5/soma?rev=1950bdb22ad8965bcee776ef4051f1665b590aeb#1950bdb22ad8965bcee776ef4051f1665b590aeb" }
+source = { git = "https://github.com/alexjmiller5/soma?rev=a2bcf448391cdaa54d668d92a42f6a9272a6cf25#a2bcf448391cdaa54d668d92a42f6a9272a6cf25" }

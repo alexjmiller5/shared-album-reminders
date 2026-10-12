@@ -17,4 +17,4 @@ line-length = 100
 select = ["E", "F", "I", "UP"]
 
 [tool.uv.sources]
-soma = { git = "https://github.com/alexjmiller5/soma", rev = "1950bdb22ad8965bcee776ef4051f1665b590aeb" }
+soma = { git = "https://github.com/alexjmiller5/soma", rev = "a2bcf448391cdaa54d668d92a42f6a9272a6cf25" }

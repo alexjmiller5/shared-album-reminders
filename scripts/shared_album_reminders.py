@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["soma @ git+https://github.com/alexjmiller5/soma@1950bdb22ad8965bcee776ef4051f1665b590aeb"]
+# dependencies = ["soma @ git+https://github.com/alexjmiller5/soma@a2bcf448391cdaa54d668d92a42f6a9272a6cf25"]
 # ///
 """Create one reminder per newly discovered shared album."""
 
@@ -194,9 +194,12 @@ def configure(path: Path, config: dict) -> None:
         handle.write("\n")
 
 
-def expected_scopes(config: dict) -> list[str]:
+def expected_scopes(config: dict, cursor: bool = False) -> list[str]:
+    """Exactly the grants this app holds; `cursor` adds hub_at for incremental reads."""
     policy = config["policy"]
     columns = {"id", "deleted_at", config["title_column"], config["due_column"]}
+    if cursor:
+        columns.add("hub_at")
     return [f"rows:create:{policy['id']}:{policy['revision']}"] + [
         f"tables:read:{config['table']}:{column}" for column in sorted(columns)
     ]
@@ -238,11 +241,49 @@ def read_tasks(client, config: dict) -> list[dict]:
     raise ValueError("Task read exceeded its bound; no writes attempted.")
 
 
-def run_reminders(albums, config, state, client, *, today, now, dry_run):
+def read_task_arrivals(client, config: dict, cache: Path | None) -> list[dict]:
+    """The same complete projection (tombstones included) from a held copy plus
+    arrivals since its cursor: soma's table-pull helper, one `/v1/cursor`
+    request when nothing moved. Losing the copy costs one full pull."""
+    from soma.table_pull import HubError, pull_table
+
+    columns = sorted({"id", "deleted_at", config["title_column"], config["due_column"]})
+    try:
+        held = json.loads(cache.read_text()) if cache and cache.exists() else {}
+    except ValueError:
+        held = {}
+
+    def post(route, body):
+        response = client.request(route, body)
+        if response.get("status") != 200 or not isinstance(response.get("data"), dict):
+            raise HubError(f"hub {route} HTTP {response.get('status')}", response.get("status"))
+        return response["data"]
+
+    pulled = pull_table(
+        config["endpoint"], None, config["table"], columns, held.get("state"), post=post
+    )
+    rows = {} if pulled["full"] else {row["id"]: row for row in held.get("rows", [])}
+    for row in pulled["rows"] + pulled["tombstones"]:
+        rows[row["id"]] = row
+    tasks = [rows[key] for key in sorted(rows)]
+    if cache:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        partial = cache.with_suffix(".partial")
+        partial.write_text(json.dumps({"state": pulled["state"], "rows": tasks}))
+        partial.replace(cache)
+    return tasks
+
+
+def run_reminders(albums, config, state, client, *, today, now, dry_run, cache=None):
     from soma.creation import validate_creation_receipt, validate_creation_session
 
+    session = client.request("/v1/session")
+    scopes = (session.get("data") or {}).get("scopes") or []
+    # The session decides the read: a hub_at grant reads arrivals since the
+    # held cursor, otherwise every page of the projection is read.
+    cursor = f"tables:read:{config['table']}:hub_at" in scopes
     if not validate_creation_session(
-        client.request("/v1/session"), config["policy"], expected_scopes(config)
+        session, config["policy"], expected_scopes(config, cursor=cursor)
     ):
         raise ValueError("Soma credential does not have exactly the configured narrow grants.")
     if set(state) != {"version", "baseline", "adopted"} or state["version"] != 1:
@@ -258,7 +299,7 @@ def run_reminders(albums, config, state, client, *, today, now, dry_run):
     normalized = [Album(str(UUID(a.album_id)), a.title, a.created_on) for a in albums]
     if len({a.album_id for a in normalized}) != len(normalized):
         raise ValueError("Duplicate album UUIDs.")
-    tasks = read_tasks(client, config)
+    tasks = read_task_arrivals(client, config, cache) if cursor else read_tasks(client, config)
     task_ids = {task["id"] for task in tasks}
     for album in normalized:
         if album.album_id in adopted and adopted[album.album_id] not in task_ids:
@@ -360,8 +401,9 @@ class SomaClient:
         )
         try:
             with self.opener.open(request, timeout=30) as response:
-                raw = response.read(2_000_001)
-                if len(raw) > 2_000_000:
+                # The hub answers at most 4 MiB a batch (table-pull pages are 5,000 rows).
+                raw = response.read(5_000_001)
+                if len(raw) > 5_000_000:
                     raise ValueError("Soma response exceeded its size bound.")
                 return {"status": response.status, "data": json.loads(raw)}
         except urllib.error.HTTPError as error:
@@ -393,6 +435,13 @@ def main() -> int:
         type=Path,
         default=Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
         / "shared-album-reminders/state.json",
+    )
+    parser.add_argument(
+        "--cache",
+        type=Path,
+        default=Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+        / "shared-album-reminders/task-pull.json",
+        help="Held task copy and read cursor (safe to delete; costs one full read).",
     )
     parser.add_argument(
         "--baseline-existing",
@@ -442,6 +491,7 @@ def main() -> int:
                 today=date.today(),
                 now=datetime.now(UTC),
                 dry_run=args.dry_run,
+                cache=args.cache,
             )
             print(json.dumps(result, indent=2))
             return 0

@@ -29,17 +29,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1791547045,
-        "narHash": "sha256-Ey1jG8eiTX+UWNHOyHw2zE6RrxxjgUwwcklKQRElekI=",
+        "lastModified": 1791774081,
+        "narHash": "sha256-eD8RwqKgxlJHqKYVSmzQtRikofRM+Q/X4l5PHpRrsSY=",
         "owner": "alexjmiller5",
         "repo": "soma",
-        "rev": "1950bdb22ad8965bcee776ef4051f1665b590aeb",
+        "rev": "a2bcf448391cdaa54d668d92a42f6a9272a6cf25",
         "type": "github"
       },
       "original": {
         "owner": "alexjmiller5",
         "repo": "soma",
-        "rev": "1950bdb22ad8965bcee776ef4051f1665b590aeb",
+        "rev": "a2bcf448391cdaa54d668d92a42f6a9272a6cf25",
         "type": "github"
       }
     }
